@@ -1,0 +1,13 @@
+{"type":"event_msg","payload":{"type":"task_started","turn_id":"first-turn"}}
+{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"First synthetic question."}]}}
+{"type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"First synthetic reply."}]}}
+{"type":"event_msg","payload":{"type":"task_complete","turn_id":"first-turn"}}
+{"type":"event_msg","payload":{"type":"task_started","turn_id":"second-turn"}}
+{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Second synthetic question."}]}}
+{"type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Second synthetic reply."}]}}
+{"type":"event_msg","payload":{"type":"task_complete","turn_id":"second-turn"}}
+{"type":"event_msg","payload":{"type":"task_started","turn_id":"third-turn"}}
+{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Compare two retry strategies."}]}}
+{"type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Checking the synthetic example.\n"}]}}
+{"type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Use bounded retries with a request identifier."}]}}
+{"type":"event_msg","payload":{"type":"task_complete","turn_id":"third-turn"}}

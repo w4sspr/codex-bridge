@@ -1,0 +1,17 @@
+node_modules/
+.DS_Store
+.codex-runs/
+.env
+.env.*
+!.env.example
+*.log
+*.sqlite
+*.sqlite-*
+*.db
+*.db-*
+coverage/
+.claude/
+.codex/
+.idea/
+.vscode/
+*.tsbuildinfo

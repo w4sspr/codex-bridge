@@ -1,0 +1,12 @@
+{
+  "name": "codex-bridge",
+  "version": "0.3.0",
+  "description": "Message live Codex CLI sessions from Claude Code and wait for their replies.",
+  "author": {
+    "name": "w4sspr"
+  },
+  "homepage": "https://github.com/w4sspr/codex-bridge",
+  "repository": "https://github.com/w4sspr/codex-bridge",
+  "license": "MIT",
+  "keywords": ["codex", "mcp", "claude-code", "multi-agent"]
+}

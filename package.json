@@ -1,0 +1,30 @@
+{
+  "name": "codex-bridge",
+  "version": "0.3.0",
+  "private": true,
+  "description": "Let Claude Code exchange messages with a running Codex CLI session through MCP.",
+  "license": "MIT",
+  "author": "w4sspr",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/w4sspr/codex-bridge.git"
+  },
+  "bugs": "https://github.com/w4sspr/codex-bridge/issues",
+  "homepage": "https://github.com/w4sspr/codex-bridge#readme",
+  "engines": { "bun": ">=1.3.14" },
+  "packageManager": "bun@1.3.14",
+  "type": "module",
+  "scripts": {
+    "start": "bun run server/index.ts",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "verify:mcp": "bun run scripts/mcp-client.ts handshake"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.30.0"
+  },
+  "devDependencies": {
+    "@types/bun": "1.3.14",
+    "typescript": "5.9.3"
+  }
+}

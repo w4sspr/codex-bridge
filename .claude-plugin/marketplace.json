@@ -1,0 +1,21 @@
+{
+  "name": "codex-bridge",
+  "owner": {
+    "name": "w4sspr"
+  },
+  "metadata": {
+    "description": "Talk to running Codex CLI sessions from Claude Code.",
+    "version": "0.3.0"
+  },
+  "plugins": [
+    {
+      "name": "codex-bridge",
+      "description": "Message live Codex CLI sessions from Claude Code and wait for their replies.",
+      "version": "0.3.0",
+      "author": {
+        "name": "w4sspr"
+      },
+      "source": "."
+    }
+  ]
+}
