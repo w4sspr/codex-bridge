@@ -1,36 +1,38 @@
 # codex-bridge
 
-Ask a running Codex CLI session for a second opinion from Claude Code, then continue the conversation without copying messages between terminals.
+**Connect Claude Code to a running OpenAI Codex CLI session.**
 
-`codex-bridge` is a Claude Code plugin with four MCP tools: discover sessions, send a message, wait for a reply, and read recent conversation text. It uses the Codex session you already opened, with that session's context and permissions.
+`codex-bridge` is a Claude Code plugin and MCP server for agent to agent messaging. Let Claude and Codex discuss a problem and work towards a consensus.
+
+It connects to the Codex session you already have open, with that session's existing context. You don't need to be a meat proxy copying prompts and answers between terminals.
 
 ```text
-Claude Code ── MCP over stdio ── codex-bridge ── codex queue ── Codex CLI
-                                    ↑                          │
-                                    └── reads registry/rollout ─┘
+Claude Code → MCP server → codex queue → your running Codex session
+Claude Code ← MCP reply  ← transcript ← Codex's answer
 ```
 
-This is an independent community project, unaffiliated with OpenAI or Anthropic. It is an early release built against Codex CLI 0.153.4 on macOS. Codex's local session format is not a stable integration API, so compatibility with other versions must be checked.
+## Why I use it
+
+I mostly use this to get Claude and Codex to "sort it out" and reach a consensus. If they disagree about an approach, they can discuss the specific points with each other instead of waiting for me to pass every message along.
+
+That could mean settling on an implementation plan or working through a bug. It also works for code review: Codex can inspect Claude's changes, and Claude can respond to the objections.
+
+Each agent keeps its own conversation history. Claude includes the context Codex needs with each question, and Codex's side of the exchange stays visible in its terminal.
 
 ## Requirements
 
-- **macOS**, with `lsof` available. Other operating systems are not currently tested.
-- **Bun 1.3.14 or later**, available on the PATH used by Claude Code.
-- **Codex CLI with `codex queue`**, already configured and signed in. Tested: 0.153.4.
-- **Claude Code with plugin support.** Tested: 2.1.265.
+| Requirement | Version / notes |
+| --- | --- |
+| macOS | Requires `lsof`; other platforms haven't been tested. |
+| Bun | 1.3.14 or later, available on Claude Code's PATH. |
+| OpenAI Codex CLI | Tested with 0.153.4. Must support `codex queue` and already be configured and signed in. |
+| Claude Code | Tested with 2.1.265, with plugin support. |
 
-Check the commands before installing:
+This is an early release. Other Codex versions haven't been checked, and its internal session format can change between releases. Run `codex queue --help` to check that your CLI has the required command.
 
-```sh
-bun --version
-codex --version
-codex queue --help
-claude --version
-```
+## Install in Claude Code
 
-## Install
-
-In Claude Code:
+Run these commands inside Claude Code:
 
 ```text
 /plugin marketplace add w4sspr/codex-bridge
@@ -38,85 +40,88 @@ In Claude Code:
 /reload-plugins
 ```
 
-Claude Code copies the plugin into its cache and installs its locked dependencies with Bun. See [Claude Code's dependency-install behavior](https://code.claude.com/docs/en/plugins-reference#nodejs-package-dependencies). Restart Claude Code if the MCP server does not appear.
+Claude Code copies the plugin into its cache and installs the locked dependencies with Bun. Restart Claude Code if the MCP server doesn't appear. See [Claude Code's dependency-install behavior](https://code.claude.com/docs/en/plugins-reference#nodejs-package-dependencies) for details.
 
-To try a local checkout before publishing, substitute its absolute path for `w4sspr/codex-bridge` in the marketplace command. For development without installing a marketplace:
+The bridge uses your existing Codex authentication. It needs no extra API key, and messages count towards the target session's normal model usage.
+
+## Start a conversation
+
+### 1. Open Codex
+
+In another terminal, start Codex in the project you want to discuss:
+
+```sh
+codex
+```
+
+Send at least one message there. The bridge can only find the session after Codex saves its first message.
+
+### 2. Find the session
+
+Back in Claude Code, ask:
+
+```text
+Use codex-bridge to list my running Codex sessions.
+```
+
+Pick a session from the list. You can use its full UUID, a unique UUID prefix, or its exact name. Or just let Claude figure it out tbh. If more than one session fits, it'll probably ask.
+
+### 3. Ask Codex something
+
+Replace `a1b2c3d4` with your session's UUID prefix:
+
+```text
+/codex-bridge:talk a1b2c3d4 Review the current changes for unsafe retries and duplicate writes.
+```
+
+Claude sends its position and question to Codex, reads the reply, and follows up on disagreements. When the discussion ends, Claude reports what they agreed on and what remains unresolved.
+
+The default is **four rounds**, with one Claude message and one Codex reply per round. Ask for a different limit in your request, such as "use up to eight rounds." The command stops earlier if the agents agree or start repeating themselves without making progress. You'll still need to judge the result, even when they agree.
+
+This limit is part of `/talk`'s instructions. The MCP tools themselves have no round limit.
+
+If your session name contains spaces, use its UUID or a unique UUID prefix with `/talk`. Direct MCP calls accept the full name.
+
+## Use the MCP tools directly
+
+You can also call the tools individually for your own multi-agent coding workflow:
+
+| Tool | What it does |
+| --- | --- |
+| `codex_list_sessions` | Lists saved Codex sessions and checks which appear to be running. |
+| `codex_send` | Sends a message to a chosen session and optionally waits for the reply. |
+| `codex_wait_reply` | Recovers a specific request's reply, including after a timeout or bridge restart. |
+| `codex_read_transcript` | Reads recent user and assistant messages from a session. |
+
+Keep the `request_id` returned by a send. If the answer takes too long, pass that ID and the same thread to `codex_wait_reply`. The message may already have been delivered, so resending it could start the same work twice.
+
+The [MCP tool reference](docs/MCP.md) has the arguments, defaults, response fields, and recovery examples.
+
+## Privacy and permissions
+
+The bridge runs locally over stdio. It has no network listener or added telemetry. It reads Codex's registry and transcript files and sends messages through `codex queue`.
+
+**The MCP client can read sessions across projects in the selected Codex home.** That includes session titles, paths, and conversation text. Only enable it in a client you trust with that information. The bridge doesn't redact messages or transcripts.
+
+Codex can contact its model provider and run tools in response to a queued prompt, using the target session's existing permissions. Check what you're asking the agents to share or do.
+
+Both the bridge and Codex must use the same `CODEX_HOME`, which defaults to `~/.codex`. Remote Codex app-server sessions aren't supported.
+
+## Troubleshooting
+
+If no sessions appear, send a first message in Codex and check that both processes use the same `CODEX_HOME`. For a session that appears stopped, check its Codex terminal is still open and `lsof` is available. The liveness check is a heuristic, so a session listed as running isn't guaranteed to answer.
+
+Codex may be finishing another turn when you send a message. Recover a slow reply with its `request_id`. Your MCP client's timeout is separate from the bridge's wait timeout.
+
+See [troubleshooting and updates](docs/TROUBLESHOOTING.md) for dependency problems, format errors, timeout settings, and migration from the old local marketplace.
+
+## Development
+
+Tests use synthetic registries and transcripts; they don't need model credentials. On macOS, install `coreutils` and `trash` with Homebrew if `timeout` or `trash` is missing.
 
 ```sh
 git clone https://github.com/w4sspr/codex-bridge.git
 cd codex-bridge
-bun install --frozen-lockfile --ignore-scripts
-claude --plugin-dir "$PWD"
-```
-
-No separate API key belongs in this repository. Codex uses its existing authentication. Queueing a prompt may consume the target session's normal model usage.
-
-## First conversation
-
-1. Open `codex` in another terminal and send its first message. A blank session has no persisted rollout to target.
-2. In Claude Code, ask it to list live Codex sessions. Use a full session UUID, a unique UUID prefix, or an exact session name.
-3. Start a discussion:
-
-```text
-/codex-bridge:talk 11111111 Review the retry strategy we just discussed.
-```
-
-Replace the example prefix with your target. The command sends one message at a time and stops when the agents agree or after four rounds. Agreement is a second opinion, not a guarantee of correctness.
-
-For session names containing spaces, use the UUID or a unique UUID prefix with `/talk`. Direct MCP calls accept the full name.
-
-## MCP tools
-
-| Tool | Inputs | Behavior |
-| --- | --- | --- |
-| `codex_list_sessions` | `limit=20`, `include_archived=false`, `live_only=false` | Lists persisted sessions, newest first, with liveness and PID. |
-| `codex_send` | `thread`, `message`, `wait=true`, `timeout_s=300`, `force=false` | Queues a uniquely marked message and optionally waits for its matching turn. Returns `queued_id` and `request_id`. |
-| `codex_wait_reply` | `thread`, optional `request_id`, `timeout_s=300` | With `request_id`, recovers that request's full reply, including replies completed before this call. Without it, waits for the next completion from the current transcript end. |
-| `codex_read_transcript` | `thread`, `last_n=10` | Reads recent user and assistant messages, including assistant commentary. Does not require a running session. |
-
-A reply has `status` (`replied`, `aborted`, or `timeout`), `reply`, `elapsed_ms`, and `tool_calls_seen`. A send with `wait: false` returns `status: "queued"`.
-
-### Recover a slow reply
-
-Keep the `request_id` returned by `codex_send`. After a timeout, or a send with `wait: false`, use it with the same thread:
-
-```json
-{
-  "thread": "11111111-1111-4111-8111-111111111111",
-  "request_id": "22222222-2222-4222-8222-222222222222",
-  "timeout_s": 300
-}
-```
-
-Pass that object to `codex_wait_reply`, replacing both example IDs. It searches the persisted rollout, so recovery also works after the bridge restarts or the target session closes. A recovered reply includes the whole matched turn, including text returned in earlier partial replies.
-
-Do not resend a timed-out message automatically. Queue delivery may already have happened. An aborted turn is not an agreement. Without `request_id`, `codex_wait_reply` can observe an unrelated turn and cannot recover a reply that already finished.
-
-## Privacy and permissions
-
-- This is a local stdio server. It does not open a network listener or add telemetry. `codex queue` can cause the target Codex session to contact its configured model provider and execute tools under its existing permissions.
-- The bridge opens the registry read-only and reads rollout files. It invokes the supported `codex queue` command to send messages; it does not directly edit Codex's session files.
-- The MCP client can access **all sessions in the selected Codex home**, across projects. Listings include titles, working directories, and rollout paths. Transcript reads can contain private conversation text. Only enable the plugin in a client you trust with that data.
-- There is no secret detector or redaction filter on messages or transcripts. Review what you ask the agents to share. Do not include credentials or confidential client data in public bug reports.
-- `CODEX_HOME` selects an alternate session store. If unset or empty, the bridge uses `~/.codex`. The server and target Codex process must use the same home. Remote app-server sessions are not supported.
-
-## Limits and troubleshooting
-
-- **No live sessions:** ensure Codex has received its first message and `lsof` is available. Liveness is a heuristic: a process named `codex` must have the session's lock file open for writing. It is not a guarantee that the session will remain running or answer.
-- **Stopped session:** sends are rejected unless `force: true`. Force queues a message for later delivery and does not start Codex. The consensus command never uses it.
-- **Busy session:** Codex delivers queued messages at a turn boundary. Use the returned `request_id` to recover a delayed answer.
-- **MCP request timed out:** client timeouts are separate from `timeout_s`. Configure the client deadline above the bridge wait, or use `wait: false` and recover by `request_id`.
-- **Missing dependencies:** current Claude Code installs them into each cached plugin version. If installation was interrupted or used an older Claude Code, inspect `/plugin` for the installed directory, then run `bun install --frozen-lockfile --ignore-scripts` there and reload.
-- **Malformed rollout or missing completion:** the bridge reports an error when recognized records lose required structure, or when a later user turn would cause it to misattribute a reply. Unknown record types are ignored. Include a synthetic reproduction when reporting format changes.
-- **Large histories:** registry lookup and transcript polling use local files; polling rereads the rollout. Very large sessions may be slow.
-
-Update with `/plugin marketplace update codex-bridge`, followed by `/plugin update codex-bridge@codex-bridge` and `/reload-plugins` (or restart).
-
-If migrating from the old local marketplace, uninstall `codex-bridge@codex-bridge-local` before installing this one to avoid duplicate tools.
-
-## Development
-
-```sh
 bun install --frozen-lockfile --ignore-scripts
 bun run typecheck
 timeout 120 bun test
@@ -125,6 +130,14 @@ claude plugin validate .
 claude plugin validate .claude-plugin/plugin.json
 ```
 
-The tests use synthetic registries and transcripts; they do not require model credentials. On macOS, test cleanup uses `trash`. Install `coreutils` and `trash` with Homebrew if those commands are missing. The bare server waits silently for MCP JSON-RPC on stdin.
+To load your checkout directly:
 
-See [CONTRIBUTING.md](CONTRIBUTING.md), [architecture](docs/ARCHITECTURE.md), and [SECURITY.md](SECURITY.md). Licensed under [MIT](LICENSE).
+```sh
+claude --plugin-dir "$PWD"
+```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md), [architecture](docs/ARCHITECTURE.md), and [SECURITY.md](SECURITY.md).
+
+## License
+
+[MIT](LICENSE). An independent community project, unaffiliated with OpenAI or Anthropic (but I'm open to offers).

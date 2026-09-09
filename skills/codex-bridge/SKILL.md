@@ -16,7 +16,7 @@ Use this skill when the user wants Claude and an already-running Codex TUI sessi
 3. Call `codex_send` once with `wait: true`. Use the default 300-second timeout unless the user requests another duration. Keep the returned `request_id` with its thread.
 4. If Codex disagrees, send one follow-up naming the specific point of disagreement. Do not restate the whole discussion.
 5. Never send a second message while the preceding request is unresolved. After a timeout, call `codex_wait_reply` with the same thread and the returned `request_id`; this also recovers a reply completed between calls. If the queue command errors after starting, use the request ID in its error when available. Delivery may already have happened, so never automatically resend. If recovery keeps timing out, stop the discussion and report the pending request instead of starting another round. Do not use the uncorrelated wait mode to recover a send.
-6. Stop when both agents agree. Otherwise stop after `max_rounds` rounds, default 4, and report the remaining disagreement rather than forcing consensus.
+6. Use the user's requested round limit as `max_rounds`, defaulting to 4 if none is specified. One round is one Claude message and its matching Codex reply. Stop when both agents agree, the round limit is reached, or the discussion repeats positions without new evidence or actionable points. Report any remaining disagreement rather than forcing consensus.
 7. Report the agreed points and open points to the user. Mention that the full exchange is available through `codex_read_transcript`.
 
 ## Safety
