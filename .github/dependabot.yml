@@ -1,11 +1,14 @@
 version: 2
 updates:
   # One grouped PR per ecosystem per month. CI auto-merges them when green
-  # (see .github/workflows/ci.yml); failures open an issue.
+  # (see .github/workflows/ci.yml); failures open an issue. The 7-day cooldown
+  # only offers releases at least a week old (security updates are exempt).
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: monthly
+    cooldown:
+      default-days: 7
     groups:
       actions:
         patterns: ["*"]
@@ -13,6 +16,8 @@ updates:
     directory: /
     schedule:
       interval: monthly
+    cooldown:
+      default-days: 7
     groups:
       # Majors get their own PR so a breaking one can't block the safe updates.
       minor-and-patch:
