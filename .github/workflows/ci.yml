@@ -36,6 +36,9 @@ jobs:
       - run: timeout 60 gitleaks git . --redact --no-banner --log-opts=--all
 
   # Dependabot PRs merge themselves once verify passes, pinned to the tested head commit.
+  # A conflict or a newer commit is not a failure: Dependabot rebases conflicting PRs
+  # itself and the next CI run retries. A successful merge closes any escalation issue
+  # left by an earlier attempt.
   dependabot-merge:
     needs: verify
     if: github.event_name == 'pull_request' && github.event.pull_request.user.login == 'dependabot[bot]'
@@ -43,12 +46,33 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: write
+      issues: write
       pull-requests: write
     steps:
-      - run: gh pr merge --squash --match-head-commit "$HEAD_SHA" "$PR_URL"
+      - run: |
+          if gh pr merge --squash --match-head-commit "$HEAD_SHA" "$PR_URL"; then
+            title="Dependabot update needs a look: PR #${PR_NUMBER}"
+            gh issue list -R "$GITHUB_REPOSITORY" --state open --json number,title |
+              jq -r --arg t "$title" '.[] | select(.title == $t) | .number' |
+              while read -r n; do
+                gh issue close "$n" -R "$GITHUB_REPOSITORY" --reason completed --comment "Merged automatically by a later CI run."
+              done
+            exit 0
+          fi
+          read -r mergeable head < <(gh pr view "$PR_URL" --json mergeable,headRefOid --jq '"\(.mergeable) \(.headRefOid)"')
+          if [ "$mergeable" = CONFLICTING ]; then
+            echo "Merge conflict: Dependabot will rebase and the next CI run retries."
+            exit 0
+          fi
+          if [ "$head" != "$HEAD_SHA" ]; then
+            echo "PR head moved to $head since this run; the newer run decides."
+            exit 0
+          fi
+          exit 1
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_URL: ${{ github.event.pull_request.html_url }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
 
   # If verify or the merge fails, open one issue per PR so a human hears about it.
@@ -62,7 +86,8 @@ jobs:
     steps:
       - run: |
           title="Dependabot update needs a look: PR #${PR_NUMBER}"
-          existing=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search "\"$title\" in:title" --json number --jq '.[0].number // empty')
+          existing=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --json number,title |
+            jq -r --arg t "$title" '[.[] | select(.title == $t)][0].number // empty')
           if [ -n "$existing" ]; then
             echo "Issue #$existing already open."
             exit 0

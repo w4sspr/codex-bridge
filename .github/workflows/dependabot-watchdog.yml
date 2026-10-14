@@ -27,7 +27,8 @@ jobs:
           fi
           echo "$stale"
           title="Dependabot updates stuck for over a week"
-          existing=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search "\"$title\" in:title" --json number --jq '.[0].number // empty')
+          existing=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --json number,title |
+            jq -r --arg t "$title" '[.[] | select(.title == $t)][0].number // empty')
           if [ -n "$existing" ]; then
             echo "Issue #$existing already open."
             exit 0
