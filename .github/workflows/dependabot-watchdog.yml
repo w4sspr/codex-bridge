@@ -1,0 +1,38 @@
+name: Dependabot watchdog
+
+# Safety net for the auto-merge in ci.yml: any Dependabot PR still open after a
+# week (CI cancelled, merge never ran, conflict) gets one issue.
+on:
+  schedule:
+    - cron: "17 9 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+
+jobs:
+  stale-updates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - run: |
+          cutoff=$(date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%SZ)
+          stale=$(gh pr list -R "$GITHUB_REPOSITORY" --app dependabot --state open --json number,title,createdAt,url \
+            --jq ".[] | select(.createdAt < \"$cutoff\") | \"- #\(.number) \(.title) (\(.url))\"")
+          if [ -z "$stale" ]; then
+            echo "No Dependabot PRs open longer than a week."
+            exit 0
+          fi
+          echo "$stale"
+          title="Dependabot updates stuck for over a week"
+          existing=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search "\"$title\" in:title" --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            echo "Issue #$existing already open."
+            exit 0
+          fi
+          gh issue create -R "$GITHUB_REPOSITORY" --title "$title" \
+            --body "$(printf '@w4sspr These were not auto-merged:\n\n%s\n' "$stale")"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

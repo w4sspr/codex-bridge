@@ -34,3 +34,43 @@ jobs:
       - run: timeout 20 bun run verify:mcp
       - run: timeout 60 bun audit
       - run: timeout 60 gitleaks git . --redact --no-banner --log-opts=--all
+
+  # Dependabot PRs merge themselves once verify passes, pinned to the tested head commit.
+  dependabot-merge:
+    needs: verify
+    if: github.event_name == 'pull_request' && github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - run: gh pr merge --squash --match-head-commit "$HEAD_SHA" "$PR_URL"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+
+  # If verify or the merge fails, open one issue per PR so a human hears about it.
+  dependabot-escalate:
+    needs: [verify, dependabot-merge]
+    if: failure() && github.event_name == 'pull_request' && github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - run: |
+          title="Dependabot update needs a look: PR #${PR_NUMBER}"
+          existing=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search "\"$title\" in:title" --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            echo "Issue #$existing already open."
+            exit 0
+          fi
+          gh issue create -R "$GITHUB_REPOSITORY" --title "$title" \
+            --body "@w4sspr CI or the auto-merge failed on ${PR_URL}, so it was left open. Run: ${RUN_URL}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
